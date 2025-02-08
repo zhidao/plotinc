@@ -1,27 +1,60 @@
 #include <plotinc/plotinc.h>
 
+static void _plotincAxisSetRange(plotincAxis *axis, double min, double max){
+  axis->range_min = min;
+  axis->range_max = max;
+}
+
+static void _plotincAxisSetTicsNum(plotincAxis *axis, int num){
+  axis->tics_num = num;
+}
+
+static void _plotincAxisSetLabel(plotincAxis *axis, const char *label){
+  strncpy( axis->label, label, PLOTINC_LABEL_MAXSIZE-1 );
+}
+
+static void _plotincAxisInit(plotincAxis *axis){
+  _plotincAxisSetRange( axis, -10, 10 );
+  _plotincAxisSetTicsNum( axis, PLOTINC_DEFAULT_TICS_NUM );
+  axis->label[0] = '\0';
+  axis->flag_axis = true;
+  axis->flag_tics = true;
+  axis->flag_grid = true;
+  axis->flag_label = true;
+}
+
+static double _plotincAxisVal(const plotincAxis *axis, double ratio){
+  return axis->range_min + ( axis->range_max - axis->range_min ) * ratio;
+}
+
+static double _plotincAxisValRatio(const plotincAxis *axis, double val){
+  return ( val - axis->range_min ) / ( axis->range_max - axis->range_min );
+}
+
+static double _plotincAxisTicsWidth(const plotincAxis *axis){
+  double w;
+  int n;
+
+  w = ( axis->range_max - axis->range_min ) / axis->tics_num;
+  n = floor( log10( w ) );
+  return ceil( w / exp10( n ) ) * exp10( n );
+}
+
+static double _plotincAxisTicsVal(const plotincAxis *axis, double tics_width, int i){
+  return ceil( axis->range_min / tics_width + i ) * tics_width;
+}
+
 /* frame */
 
 /* initialize a frame. */
 void plotincFrameInit(plotincFrame *frame)
 {
-  frame->plot_xtics_num = PLOTINC_DEFAULT_TICS_NUM;
-  frame->plot_ytics_num = PLOTINC_DEFAULT_TICS_NUM;
   plotincFrameSetFont( frame, PLOTINC_DEFAULT_FONT_SIZE, PLOTINC_DEFAULT_FONT );
   plotincFrameResize( frame, 0, 0, 0, 0 );
-  plotincFrameSetXRange( frame, -10, 10 );
-  plotincFrameSetYRange( frame, -10, 10 );
-  frame->label_x[0] = frame->label_y[0] = '\0';
+  _plotincAxisInit( &frame->xaxis );
+  _plotincAxisInit( &frame->yaxis );
   frame->draw = NULL;
-
   frame->flag_border = true;
-  frame->flag_xaxis = true;
-  frame->flag_yaxis = true;
-  frame->flag_xtics = true;
-  frame->flag_ytics = true;
-  frame->flag_xlabel = true;
-  frame->flag_ylabel = true;
-
   frame->next = NULL;
 }
 
@@ -49,15 +82,13 @@ void plotincFrameSetFont(plotincFrame *frame, int size, char *fontname)
 /* set x-range of a frame. */
 void plotincFrameSetXRange(plotincFrame *frame, double xmin, double xmax)
 {
-  frame->range_xmin = xmin;
-  frame->range_xmax = xmax;
+  _plotincAxisSetRange( &frame->xaxis, xmin, xmax );
 }
 
 /* set y-range of a frame. */
 void plotincFrameSetYRange(plotincFrame *frame, double ymin, double ymax)
 {
-  frame->range_ymin = ymin;
-  frame->range_ymax = ymax;
+  _plotincAxisSetRange( &frame->yaxis, ymin, ymax );
 }
 
 /* convert a double-precision value to x-component of coordinates. */
@@ -65,7 +96,7 @@ int plotincFrameXCoord(const plotincFrame *frame, double x)
 {
   double r;
 
-  r = ( x - frame->range_xmin ) / ( frame->range_xmax - frame->range_xmin );
+  r = _plotincAxisValRatio( &frame->xaxis, x );
   if( r < 0 || r > 1 ) return -1;
   return frame->plot_ox + frame->plot_width * r;
 }
@@ -75,9 +106,9 @@ int plotincFrameYCoord(const plotincFrame *frame, double y)
 {
   double r;
 
-  r = ( frame->range_ymax - y ) / ( frame->range_ymax - frame->range_ymin );
+  r = _plotincAxisValRatio( &frame->yaxis, y );
   if( r < 0 || r > 1 ) return -1;
-  return frame->plot_oy + frame->plot_height * r;
+  return frame->plot_oy + frame->plot_height * ( 1 - r );
 }
 
 /* recall font of a frame. */
@@ -90,13 +121,13 @@ static void _plotincFrameRecallFont(const plotincFrame *frame, cairo_t *cairo)
 /* set x-label of a frame. */
 void plotincFrameSetXLabel(plotincFrame *frame, const char *label)
 {
-  strncpy( frame->label_x, label, PLOTINC_LABEL_MAXSIZE-1 );
+  _plotincAxisSetLabel( &frame->xaxis, label );
 }
 
 /* set y-label of a frame. */
 void plotincFrameSetYLabel(plotincFrame *frame, const char *label)
 {
-  strncpy( frame->label_y, label, PLOTINC_LABEL_MAXSIZE-1 );
+  _plotincAxisSetLabel( &frame->yaxis, label );
 }
 
 /* draw border lines of a frame. */
@@ -226,22 +257,20 @@ static void _plotincFrameDrawYTics(const plotincFrame *frame, cairo_t *cairo, do
 void plotincFrameDrawXTics(const plotincFrame *frame, cairo_t *cairo)
 {
   double tics_width, val;
-  int n, tics;
+  int i, tics;
 
-  tics_width = ( frame->range_xmax - frame->range_xmin ) / frame->plot_xtics_num;
-  n = floor( log10( tics_width ) );
-  tics_width = ceil( tics_width / exp10( n ) ) * exp10( n );
-  if( frame->range_xmax > 0 && frame->range_xmin < 0 ){
-    for( n=0; ( tics = plotincFrameXCoord( frame, ( val = -n * tics_width ) ) ) >= 0; n++ )
+  tics_width = _plotincAxisTicsWidth( &frame->xaxis );
+  if( frame->xaxis.range_max > 0 && frame->xaxis.range_min < 0 ){
+    for( i=0; ( tics = plotincFrameXCoord( frame, ( val =-i * tics_width ) ) ) >= 0; i++ )
       _plotincFrameDrawXTics( frame, cairo, val, tics );
-    for( n=0; ( tics = plotincFrameXCoord( frame, ( val = n * tics_width ) ) ) >= 0; n++ )
+    for( i=0; ( tics = plotincFrameXCoord( frame, ( val = i * tics_width ) ) ) >= 0; i++ )
       _plotincFrameDrawXTics( frame, cairo, val, tics );
   } else{
-    for( n=0; ; n++ ){
-      tics = plotincFrameXCoord( frame, ( val = ceil( frame->range_xmin / tics_width + n ) * tics_width ) );
+    for( i=0; ; i++ ){
+      tics = plotincFrameXCoord( frame, ( val = _plotincAxisTicsVal( &frame->xaxis, tics_width, i ) ) );
       if( tics >= 0 )
         _plotincFrameDrawXTics( frame, cairo, val, tics );
-      if( n > frame->plot_xtics_num ) break;
+      if( i > frame->xaxis.tics_num ) break;
     }
   }
 }
@@ -250,22 +279,20 @@ void plotincFrameDrawXTics(const plotincFrame *frame, cairo_t *cairo)
 void plotincFrameDrawYTics(const plotincFrame *frame, cairo_t *cairo)
 {
   double tics_width, val;
-  int n, tics;
+  int i, tics;
 
-  tics_width = ( frame->range_ymax - frame->range_ymin ) / frame->plot_ytics_num;
-  n = floor( log10( tics_width ) );
-  tics_width = ceil( tics_width / exp10( n ) ) * exp10( n );
-  if( frame->range_ymax > 0 && frame->range_ymin < 0 ){
-    for( n=0; ( tics = plotincFrameYCoord( frame, ( val = -n * tics_width ) ) ) >= 0; n++ )
+  tics_width = _plotincAxisTicsWidth( &frame->yaxis );
+  if( frame->yaxis.range_max > 0 && frame->yaxis.range_min < 0 ){
+    for( i=0; ( tics = plotincFrameYCoord( frame, ( val =-i * tics_width ) ) ) >= 0; i++ )
       _plotincFrameDrawYTics( frame, cairo, val, tics );
-    for( n=0; ( tics = plotincFrameYCoord( frame, ( val = n * tics_width ) ) ) >= 0; n++ )
+    for( i=0; ( tics = plotincFrameYCoord( frame, ( val = i * tics_width ) ) ) >= 0; i++ )
       _plotincFrameDrawYTics( frame, cairo, val, tics );
   } else{
-    for( n=0; ; n++ ){
-      tics = plotincFrameYCoord( frame, ( val = ceil( frame->range_ymin / tics_width + n ) * tics_width ) );
+    for( i=0; ; i++ ){
+      tics = plotincFrameYCoord( frame, ( val = _plotincAxisTicsVal( &frame->yaxis, tics_width, i ) ) );
       if( tics >= 0 )
         _plotincFrameDrawYTics( frame, cairo, val, tics );
-      if( n > frame->plot_ytics_num ) break;
+      if( i > frame->yaxis.tics_num ) break;
     }
   }
 }
@@ -275,13 +302,13 @@ void plotincFrameDrawXLabel(const plotincFrame *frame, cairo_t *cairo)
 {
   cairo_text_extents_t te;
 
-  if( frame->label_x[0] ){
+  if( frame->xaxis.label[0] ){
     _plotincFrameRecallFont( frame, cairo );
-    cairo_text_extents( cairo, frame->label_x, &te );
+    cairo_text_extents( cairo, frame->xaxis.label, &te );
     cairo_move_to( cairo,
       frame->plot_ox + ( frame->plot_width - te.width ) / 2,
       frame->plot_oy + frame->plot_height + frame->baseline_skip*2 );
-    cairo_show_text( cairo, frame->label_x );
+    cairo_show_text( cairo, frame->xaxis.label );
   }
 }
 
@@ -290,14 +317,14 @@ void plotincFrameDrawYLabel(const plotincFrame *frame, cairo_t *cairo)
 {
   cairo_text_extents_t te;
 
-  if( frame->label_y[0] ){
+  if( frame->yaxis.label[0] ){
     _plotincFrameRecallFont( frame, cairo );
-    cairo_text_extents( cairo, frame->label_y, &te );
+    cairo_text_extents( cairo, frame->yaxis.label, &te );
     cairo_save( cairo );
     cairo_translate( cairo, frame->plot_ox, frame->plot_oy + frame->plot_height/2 );
     cairo_rotate( cairo, -M_PI/2 );
     cairo_translate( cairo, -te.width/2, -frame->baseline_skip - PLOTINC_BASELINE_MARGIN );
-    cairo_show_text( cairo, frame->label_y );
+    cairo_show_text( cairo, frame->yaxis.label );
     cairo_restore( cairo );
   }
 }
@@ -305,13 +332,13 @@ void plotincFrameDrawYLabel(const plotincFrame *frame, cairo_t *cairo)
 /* draw a frame. */
 void plotincFrameDraw(plotincFrame *frame, cairo_t *cairo)
 {
-  if( frame->flag_border ) plotincFrameDrawBorder( frame, cairo );
-  if( frame->flag_xaxis  ) plotincFrameDrawXAxis(  frame, cairo );
-  if( frame->flag_xtics  ) plotincFrameDrawXTics(  frame, cairo );
-  if( frame->flag_xlabel ) plotincFrameDrawXLabel( frame, cairo );
-  if( frame->flag_yaxis  ) plotincFrameDrawYAxis(  frame, cairo );
-  if( frame->flag_ytics  ) plotincFrameDrawYTics(  frame, cairo );
-  if( frame->flag_ylabel ) plotincFrameDrawYLabel( frame, cairo );
+  if( frame->flag_border )      plotincFrameDrawBorder( frame, cairo );
+  if( frame->xaxis.flag_axis  ) plotincFrameDrawXAxis(  frame, cairo );
+  if( frame->xaxis.flag_tics  ) plotincFrameDrawXTics(  frame, cairo );
+  if( frame->xaxis.flag_label ) plotincFrameDrawXLabel( frame, cairo );
+  if( frame->yaxis.flag_axis  ) plotincFrameDrawYAxis(  frame, cairo );
+  if( frame->yaxis.flag_tics  ) plotincFrameDrawYTics(  frame, cairo );
+  if( frame->yaxis.flag_label ) plotincFrameDrawYLabel( frame, cairo );
   if( frame->draw )
     frame->draw( frame, cairo );
 }
@@ -422,7 +449,7 @@ void plotincFramePlotFunction(const plotincFrame *frame, cairo_t *cairo, double 
     goto TERMINATE;
   }
   for( i=0; i<sample_num; i++ ){
-    xdata[i] = frame->range_xmin + ( frame->range_xmax - frame->range_xmin ) * (double)i / sample_num;
+    xdata[i] = _plotincAxisVal( &frame->xaxis, (double)i / sample_num );
     ydata[i] = function( xdata[i] );
   }
   plotincFramePlotData2D( frame, cairo, xdata, ydata, sample_num );

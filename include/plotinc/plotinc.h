@@ -35,39 +35,45 @@
 #define PLOTINC_FONTNAME_MAXSIZE      125
 #define PLOTINC_DEFAULT_FONT            "Times New Roman"
 
+/* axis */
+
+typedef struct{
+  double range_min;
+  double range_max;
+  int tics_num;
+  char label[PLOTINC_LABEL_MAXSIZE];
+  /* flags to draw components */
+  bool flag_axis;
+  bool flag_tics;
+  bool flag_grid;
+  bool flag_label;
+} plotincAxis;
+
 /* frame */
 
 typedef struct _plotincFrame{
+  /* drawable region */
   int ox;
   int oy;
   int width;
   int height;
+  /* plot region */
   int plot_ox;
   int plot_oy;
   int plot_width;
   int plot_height;
-  int plot_xtics_num;
-  int plot_ytics_num;
+  /* font */
   char font_name[PLOTINC_FONTNAME_MAXSIZE];
   int font_pts;
   int baseline_skip;
-
-  double range_xmin;
-  double range_xmax;
-  double range_ymin;
-  double range_ymax;
-  char label_x[PLOTINC_LABEL_MAXSIZE];
-  char label_y[PLOTINC_LABEL_MAXSIZE];
+  /* plot coordinate region */
+  plotincAxis xaxis;
+  plotincAxis yaxis;
+  /* drawing method */
   void (* draw)(struct _plotincFrame *, cairo_t *);
-
+  /* flags to draw components */
   bool flag_border;
-  bool flag_xaxis;
-  bool flag_yaxis;
-  bool flag_xtics;
-  bool flag_ytics;
-  bool flag_xlabel;
-  bool flag_ylabel;
-
+  /* list */
   struct _plotincFrame *next;
 } plotincFrame;
 
