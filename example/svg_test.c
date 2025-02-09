@@ -18,6 +18,8 @@ int main(int argc, char** argv)
   plotincFrameSetYLabel( canvas.frame_last, "Label y" );
   plotincFrameSetXRange( canvas.frame_last, -2*M_PI, 2*M_PI );
   plotincFrameSetYRange( canvas.frame_last, -2, 2 );
+  plotincFrameEnableXGrid( canvas.frame_last );
+  plotincFrameEnableYGrid( canvas.frame_last );
   plotincCanvasDraw( &canvas );
   plotincCanvasCloseSVG( &canvas );
   return 0;
