@@ -141,6 +141,7 @@ void plotincFramePlotData1D(const plotincFrame *frame, cairo_t *cairo, const dou
 void plotincFrameSetRangeByData2D(plotincFrame *frame, const double xdata[], const double ydata[], int size);
 void plotincFramePlotData2D(const plotincFrame *frame, cairo_t *cairo, const double xdata[], const double ydata[], int size);
 
+void plotincFramePlotParametricFunction(const plotincFrame *frame, cairo_t *cairo, double (* xfunction)(double), double (* yfunction)(double), double param_min, double param_max, int sample_num);
 void plotincFramePlotFunction(const plotincFrame *frame, cairo_t *cairo, double (* function)(double), int sample_num);
 
 /* canvas */

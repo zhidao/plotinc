@@ -1,5 +1,8 @@
 ﻿#include <plotinc/plotinc.h>
 
+double orbalx(double theta){ return 12 * cos( theta ); }
+double orbaly(double theta){ return  6 * sin( theta ); }
+
 void draw1(plotincFrame *frame, cairo_t *cairo)
 {
   cairo_set_source_rgb( cairo, 0, 0, 1 );
@@ -11,6 +14,9 @@ void draw1(plotincFrame *frame, cairo_t *cairo)
   cairo_set_source_rgb( cairo, 0, 1, 0 );
   plotincFrameDrawLine( frame, cairo, -8, -2, 3, 3 );
   plotincFrameDrawLine( frame, cairo,  3,  3, 6,-1 );
+
+  cairo_set_source_rgb( cairo, 0, 1, 1 );
+  plotincFramePlotParametricFunction( frame, cairo, orbalx, orbaly, -M_PI, M_PI, 1000 );
 }
 
 double sample_data[] = { -5, -3, -1, 2, 0, -4 };

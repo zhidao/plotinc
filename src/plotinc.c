@@ -527,8 +527,12 @@ void plotincFrameDraw(plotincFrame *frame, cairo_t *cairo)
   if( frame->y2axis.flag_label ) plotincFrameDrawY2Label( frame, cairo );
   if( frame->flag_title )        plotincFrameDrawTitle(   frame, cairo );
   plotincFrameDrawBorder( frame, cairo );
-  if( frame->draw )
+  if( frame->draw ){
+    cairo_rectangle( cairo, frame->plot_ox, frame->plot_oy, frame->plot_width, frame->plot_height );
+    cairo_clip( cairo );
     frame->draw( frame, cairo );
+    cairo_reset_clip( cairo );
+  }
 }
 
 /* draw a 2D point on a frame. */
@@ -624,10 +628,10 @@ void plotincFramePlotData2D(const plotincFrame *frame, cairo_t *cairo, const dou
   cairo_stroke( cairo );
 }
 
-/* plot a function on a frame. */
-void plotincFramePlotFunction(const plotincFrame *frame, cairo_t *cairo, double (* function)(double), int sample_num)
+/* plot a parametric function on a frame. */
+void plotincFramePlotParametricFunction(const plotincFrame *frame, cairo_t *cairo, double (* xfunction)(double), double (* yfunction)(double), double param_min, double param_max, int sample_num)
 {
-  double *xdata, *ydata;
+  double *xdata, *ydata, param;
   int i;
 
   xdata = malloc( sizeof(double)*sample_num );
@@ -637,13 +641,22 @@ void plotincFramePlotFunction(const plotincFrame *frame, cairo_t *cairo, double 
     goto TERMINATE;
   }
   for( i=0; i<sample_num; i++ ){
-    xdata[i] = _plotincAxisVal( &frame->xaxis, (double)i / sample_num );
-    ydata[i] = function( xdata[i] );
+    param = ( param_max - param_min ) * (double)i / sample_num + param_min;
+    xdata[i] = xfunction( param );
+    ydata[i] = yfunction( param );
   }
   plotincFramePlotData2D( frame, cairo, xdata, ydata, sample_num );
  TERMINATE:
   free( xdata );
   free( ydata );
+}
+
+/* plot a function on a frame. */
+void plotincFramePlotFunction(const plotincFrame *frame, cairo_t *cairo, double (* function)(double), int sample_num)
+{
+  double xfunction(double param){ return _plotincAxisVal( &frame->xaxis, param ); }
+  double yfunction(double param){ return function( xfunction( param ) ); }
+  plotincFramePlotParametricFunction( frame, cairo, xfunction, yfunction, 0, 1, sample_num );
 }
 
 /* canvas */
