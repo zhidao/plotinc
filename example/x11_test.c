@@ -1,7 +1,7 @@
 ﻿#include <plotinc/plotinc.h>
 
-double orbalx(double theta){ return 12 * cos( theta ); }
-double orbaly(double theta){ return  6 * sin( theta ); }
+double ovalx(double theta){ return 12 * cos( theta ); }
+double ovaly(double theta){ return  6 * sin( theta ); }
 
 void draw1(plotincFrame *frame, cairo_t *cairo)
 {
@@ -16,7 +16,7 @@ void draw1(plotincFrame *frame, cairo_t *cairo)
   plotincFrameDrawLine( frame, cairo,  3,  3, 6,-1 );
 
   cairo_set_source_rgb( cairo, 0, 1, 1 );
-  plotincFramePlotParametricFunction( frame, cairo, orbalx, orbaly, -M_PI, M_PI, 1000 );
+  plotincFramePlotParametricFunction( frame, cairo, ovalx, ovaly, -M_PI, M_PI, 1000 );
 }
 
 double sample_data[] = { -5, -3, -1, 2, 0, -4 };
@@ -71,6 +71,8 @@ int main(int argc, char** argv)
   plotincFrameSetTitle( canvas.frame_last, "Functions (trigonometrics)" );
   plotincFrameSetXRange( canvas.frame_last, -2*M_PI, 2*M_PI );
   plotincFrameSetYRange( canvas.frame_last, -2, 2 );
+  plotincFrameSetXLabel( canvas.frame_last, "$\\theta$" );
+  plotincFrameSetYLabel( canvas.frame_last, "$\\sin\\theta, \\cos\\theta$" );
   plotincFrameEnableYGrid( canvas.frame_last );
 
   plotincCanvasDraw( &canvas );

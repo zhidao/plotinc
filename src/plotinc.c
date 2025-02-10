@@ -1,4 +1,5 @@
 #include <plotinc/plotinc.h>
+#include <unistd.h>
 
 /* axis */
 
@@ -464,52 +465,138 @@ void plotincFrameDrawY2Grid(const plotincFrame *frame, cairo_t *cairo)
   cairo_set_dash( cairo, NULL, 0, 0 );
 }
 
-/* draw x-label of a frame. */
-void plotincFrameDrawXLabel(const plotincFrame *frame, cairo_t *cairo)
+/* draw label of a frame. */
+static void _plotincFrameDrawLabel(const plotincFrame *frame, cairo_t *cairo, const char *label, int x, int y, double angle)
 {
   cairo_text_extents_t te;
 
-  if( frame->xaxis.label[0] ){
-    _plotincFrameRecallFont( frame, cairo );
-    cairo_text_extents( cairo, frame->xaxis.label, &te );
-    cairo_move_to( cairo,
-      frame->plot_ox + ( frame->plot_width - te.width ) / 2,
-      frame->plot_oy + frame->plot_height + frame->baseline_skip*2 );
-    cairo_show_text( cairo, frame->xaxis.label );
+  if( !label[0] ) return;
+  _plotincFrameRecallFont( frame, cairo );
+  cairo_text_extents( cairo, label, &te );
+  cairo_save( cairo );
+  cairo_translate( cairo, x, y );
+  cairo_rotate( cairo, angle );
+  cairo_translate( cairo, -te.width/2, 0 );
+  cairo_move_to( cairo, 0, 0 );
+  cairo_show_text( cairo, label );
+  cairo_restore( cairo );
+}
+
+/* draw label in TeX format of a file. */
+#define PATHSIZ 512
+static void _plotincFrameDrawTexLabel(const plotincFrame *frame, cairo_t *cairo, const char *label, int x, int y, double angle)
+{
+  FILE *fp;
+  char tmpfile[PATHSIZ], outfile[PATHSIZ];
+  char cmd[BUFSIZ];
+  cairo_surface_t *label_image;
+  int label_width, label_height;
+  double scale;
+
+  if( !label[0] ) return;
+  strcpy( tmpfile, "_plotinc.XXXXXX" );
+  if( mkstemp( tmpfile ) < 0 ){
+    fprintf( stderr, "cannot create temprary file name." );
+    return;
+  }
+  sprintf( outfile, "%s.tex", tmpfile );
+  if( !( fp = fopen( outfile, "w" ) ) ){
+    fprintf( stderr, "cannot open a temprary file." );
+    return;
+  }
+  fprintf( fp, "\\documentclass{jarticle}\n" );
+  fprintf( fp, "\\usepackage{amsmath,amssymb,bm}\n" );
+  fprintf( fp, "\\begin{document}\n" );
+  fprintf( fp, "%s\n", label );
+  fprintf( fp, "\\thispagestyle{empty}\n" );
+  fprintf( fp, "\\end{document}\n" );
+  fclose( fp ); /* temprary TeX file */
+
+  sprintf( cmd, "platex %s > /dev/null", outfile );
+  if( system( cmd ) == 0x7f ){
+    fprintf( stderr, "failed to make a DVI file." );
+    return;
+  }
+  sprintf( cmd, "dvips -E %s.dvi > /dev/null", tmpfile );
+  if( system( cmd ) == 0x7f ){
+    fprintf( stderr, "failed to make an EPS file." );
+    return;
+  }
+  sprintf( cmd, "pstopnm -portrait -pgm %s.ps > /dev/null", tmpfile );
+  if( system( cmd ) == 0x7f ){
+    fprintf( stderr, "failed to make a PGM file." );
+    return;
+  }
+  sprintf( cmd, "convert %s001.pgm %s.png > /dev/null", tmpfile, tmpfile );
+  if( system( cmd ) == 0x7f ){
+    fprintf( stderr, "failed to make a PNG file." );
+    return;
+  }
+  sprintf( outfile, "%s.png", tmpfile );
+  label_image = cairo_image_surface_create_from_png( outfile );
+  label_width = cairo_image_surface_get_width( label_image );
+  label_height = cairo_image_surface_get_height( label_image );
+  cairo_save( cairo );
+  scale = (double)frame->baseline_skip / label_height;
+  cairo_translate( cairo, x, y );
+  cairo_rotate( cairo, angle );
+  cairo_scale( cairo, scale, scale );
+  cairo_translate( cairo,-label_width/2, 0 );
+  cairo_set_source_surface( cairo, label_image, 0, 0 );
+  cairo_paint( cairo );
+  cairo_restore( cairo );
+  cairo_surface_destroy( label_image );
+  sprintf( cmd, "rm %s* > /dev/null", tmpfile );
+  if( system( cmd ) < 0 ){
+    fprintf( stderr, "cannot remove temporary files." );
+  }
+}
+
+/* draw x-label of a frame. */
+void plotincFrameDrawXLabel(const plotincFrame *frame, cairo_t *cairo)
+{
+  if( strchr( frame->xaxis.label, '$' ) ){
+    _plotincFrameDrawTexLabel( frame, cairo, frame->xaxis.label,
+      frame->plot_ox + frame->plot_width/2,
+      frame->plot_oy + frame->plot_height + frame->baseline_skip + PLOTINC_BASELINE_MARGIN*2,
+      0 );
+  } else{
+    _plotincFrameDrawLabel( frame, cairo, frame->xaxis.label,
+      frame->plot_ox + frame->plot_width/2,
+      frame->plot_oy + frame->plot_height + frame->baseline_skip*2,
+      0 );
   }
 }
 
 /* draw y-label of a frame. */
 void plotincFrameDrawYLabel(const plotincFrame *frame, cairo_t *cairo)
 {
-  cairo_text_extents_t te;
-
-  if( frame->yaxis.label[0] ){
-    _plotincFrameRecallFont( frame, cairo );
-    cairo_text_extents( cairo, frame->yaxis.label, &te );
-    cairo_save( cairo );
-    cairo_translate( cairo, frame->plot_ox - frame->baseline_skip - PLOTINC_BASELINE_MARGIN, frame->plot_oy + frame->plot_height/2 + te.width/2 );
-    cairo_rotate( cairo, -M_PI/2 );
-    cairo_move_to( cairo, 0, 0 );
-    cairo_show_text( cairo, frame->yaxis.label );
-    cairo_restore( cairo );
+  if( strchr( frame->yaxis.label, '$' ) ){
+    _plotincFrameDrawTexLabel( frame, cairo, frame->yaxis.label,
+      frame->plot_ox - frame->baseline_skip*2 - PLOTINC_BASELINE_MARGIN,
+      frame->plot_oy + frame->plot_height/2,
+      -M_PI/2 );
+  } else{
+    _plotincFrameDrawLabel( frame, cairo, frame->yaxis.label,
+      frame->plot_ox - frame->baseline_skip - PLOTINC_BASELINE_MARGIN,
+      frame->plot_oy + frame->plot_height/2,
+     -M_PI/2 );
   }
 }
 
 /* draw y2-label of a frame. */
 void plotincFrameDrawY2Label(const plotincFrame *frame, cairo_t *cairo)
 {
-  cairo_text_extents_t te;
-
-  if( frame->y2axis.label[0] ){
-    _plotincFrameRecallFont( frame, cairo );
-    cairo_text_extents( cairo, frame->y2axis.label, &te );
-    cairo_save( cairo );
-    cairo_translate( cairo, frame->plot_ox + frame->plot_width + frame->baseline_skip*2 + PLOTINC_BASELINE_MARGIN, frame->plot_oy + frame->plot_height/2 + te.width/2 );
-    cairo_rotate( cairo, -M_PI/2 );
-    cairo_move_to( cairo, 0, 0 );
-    cairo_show_text( cairo, frame->y2axis.label );
-    cairo_restore( cairo );
+  if( strchr( frame->y2axis.label, '$' ) ){
+    _plotincFrameDrawTexLabel( frame, cairo, frame->y2axis.label,
+      frame->plot_ox + frame->plot_width + frame->baseline_skip + PLOTINC_BASELINE_MARGIN,
+      frame->plot_oy + frame->plot_height/2,
+      -M_PI/2 );
+  } else{
+    _plotincFrameDrawLabel( frame, cairo, frame->y2axis.label,
+      frame->plot_ox + frame->plot_width + frame->baseline_skip*2 + PLOTINC_BASELINE_MARGIN,
+      frame->plot_oy + frame->plot_height/2,
+     -M_PI/2 );
   }
 }
 
@@ -641,7 +728,7 @@ void plotincFramePlotParametricFunction(const plotincFrame *frame, cairo_t *cair
     goto TERMINATE;
   }
   for( i=0; i<sample_num; i++ ){
-    param = ( param_max - param_min ) * (double)i / sample_num + param_min;
+    param = ( param_max - param_min ) * (double)i / ( sample_num - 1 ) + param_min;
     xdata[i] = xfunction( param );
     ydata[i] = yfunction( param );
   }
